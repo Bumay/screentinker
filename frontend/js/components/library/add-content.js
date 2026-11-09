@@ -42,7 +42,7 @@ const ICONS = {
 };
 
 // What the uploader takes (server lib/upload-sniff.js; PDFs are rendered to images in the browser).
-export const UPLOAD_ACCEPT = 'video/*,image/*,audio/*,.zip,.wgt,.pdf,application/pdf';
+export const UPLOAD_ACCEPT = 'video/*,image/*,audio/*,.zip,.wgt,.pdf,application/pdf,.pptx,.ppt,.ppsx,.pps,.pptm,.potx,.odp';
 
 // Media URL: the type the screen should treat the link as, detected from the extension when it says.
 const MEDIA_TYPES = [

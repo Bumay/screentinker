@@ -6,6 +6,7 @@ import { t } from '../i18n.js';
 import { openHistoryModal } from '../components/history-modal.js';
 import { generateCaptions, openCaptionsEditor } from '../components/captions.js';
 import { isPdf, renderPdfToPages, baseName } from '../components/pdf-pages.js';
+import { isOffice, convertOfficeToPdf, pdfNameFor } from '../components/office-convert.js';
 import { reportConnectResult, loadCanvaLinks, syncCanvaLink, openCanvaPicker } from '../components/canva-import.js';
 import { openDialog, confirmDialog } from '../components/library/dialog.js';
 import { openMenu, closeMenu } from '../components/library/menu.js';
@@ -200,7 +201,7 @@ export function render(container) {
         </div>
         <aside class="lib-inspector" id="libInspector" hidden></aside>
       </div>
-      <input type="file" id="fileInput" hidden multiple accept="video/*,image/*,audio/*,.zip,.wgt,.pdf,application/pdf">
+      <input type="file" id="fileInput" hidden multiple accept="video/*,image/*,audio/*,.zip,.wgt,.pdf,application/pdf,.pptx,.ppt,.ppsx,.pps,.pptm,.potx,.odp">
       <div class="lib-visually-hidden" id="libLive" role="status" aria-live="polite"></div>
     </div>`;
 
@@ -233,7 +234,7 @@ export function render(container) {
   });
 
   // PDFs: the queue hands them back here (pages → folder → playlist, below).
-  uploads.setPdfImporter(importPdf);
+  uploads.setPdfImporter(importDocument);
   if (unsubscribeUploads) unsubscribeUploads();
   unsubscribeUploads = uploads.onUploaded(() => scheduleReload());
 
@@ -1164,13 +1165,15 @@ function wireDrop() {
 async function handleFiles(files, dest) {
   const all = Array.from(files || []);
   if (all.length === 0) return false;
-  const pdfs = all.filter(isPdf);
-  const list = all.filter((f) => !isPdf(f));
+  // PowerPoint decks take the PDF path too: converted on the server, then imported as a PDF.
+  const isDoc = (f) => isPdf(f) || isOffice(f);
+  const pdfs = all.filter(isDoc);
+  const list = all.filter((f) => !isDoc(f));
   if (pdfs.length) {
     const ok = await confirmDialog({
       title: t(pdfs.length === 1 ? 'library.pdf.title_one' : 'library.pdf.title_other', { count: pdfs.length }),
       bodyHtml: `<p>${esc(t('library.pdf.explain'))}</p><ul class="lib-confirm-list">${pdfs.map((f) => {
-        const base = baseName(f.name).slice(0, 100);
+        const base = baseName(isOffice(f) ? pdfNameFor(f.name) : f.name).slice(0, 100);
         return `<li><strong>${esc(f.name)}</strong> → ${esc(t('library.pdf.result', { folder: base, playlist: base, where: dest.label }))}</li>`;
       }).join('')}</ul>${list.length ? `<p class="lib-muted">${esc(t('library.pdf.others', { count: list.length }))}</p>` : ''}`,
       confirmLabel: t('library.pdf.ok'),
@@ -1191,6 +1194,21 @@ async function handleFiles(files, dest) {
  * cannot be created after the pages are up reports THAT rather than pretending the upload failed —
  * the images exist and the user should know it.
  */
+/**
+ * The queue's document importer: a PDF goes straight to importPdf, a presentation is converted to a
+ * PDF on the server first (components/office-convert.js) and then imported the same way.
+ */
+async function importDocument(file, parentFolderId, report) {
+  if (!isOffice(file)) return importPdf(file, parentFolderId, report);
+  const base = baseName(pdfNameFor(file.name)).slice(0, 100);
+  report(0, t('content.office.uploading', { name: base, pct: 0 }));
+  const pdf = await convertOfficeToPdf(file, (phase, pct) => {
+    if (phase === 'upload') report(Math.round(pct / 5), t('content.office.uploading', { name: base, pct }));
+    else report(20, t('content.office.converting', { name: base }));
+  });
+  return importPdf(pdf, parentFolderId, report);
+}
+
 async function importPdf(file, parentFolderId, report) {
   const base = baseName(file.name).slice(0, 100);
   report(0, t('content.pdf.rendering', { name: base, done: 0, total: '…' }));

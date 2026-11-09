@@ -38,6 +38,16 @@ FROM node:22-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fd
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+# PowerPoint upload (lib/office-convert.js): LibreOffice Impress, headless, turns a .pptx into a PDF
+# that the dashboard then imports page by page. The fonts are the metric-compatible stand-ins for
+# Calibri/Cambria (Carlito/Caladea) and Arial/Times/Courier (Liberation), so text in a deck made
+# with Office's defaults keeps its line breaks. Disable at runtime with OFFICE_CONVERT=false; drop
+# this layer entirely to get the upstream image size back.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+         libreoffice-impress-nogui \
+         fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-dejavu-core fonts-noto-core \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 # Relocate all state onto the volume (config.js reads DATA_DIR; unset would use
 # the in-repo paths, which we do not want in a container).

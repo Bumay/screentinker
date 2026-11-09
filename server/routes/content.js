@@ -300,6 +300,87 @@ function uploadPreflight(req, res, next) {
   next();
 }
 
+/* ================================================================================================
+ * POWERPOINT → PDF (lib/office-convert.js).
+ *
+ * Converts a presentation and answers with the PDF. Nothing is stored and no row is written: the
+ * dashboard feeds the PDF into its existing PDF import (pages → folder → playlist), so the library
+ * only ever receives the same PNG uploads a PDF import produces. The upload lands in its own temp
+ * directory, never in contentDir, and is deleted however the request ends.
+ * ============================================================================================= */
+const officeConvert = require('../lib/office-convert');
+const os = require('os');
+const officeUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      try { cb(null, fs.mkdtempSync(path.join(os.tmpdir(), 'st-office-in-'))); } catch (e) { cb(e); }
+    },
+    filename: (req, file, cb) => cb(null, 'upload.bin'),
+  }),
+  limits: { fileSize: config.maxFileSize, files: 1, fields: 5 },
+  fileFilter: (req, file, cb) => cb(null, officeConvert.isOfficeName(file.originalname)),
+});
+
+router.get('/convert-office/status', (req, res) => {
+  const st = officeConvert.status();
+  res.json({ enabled: st.enabled, extensions: officeConvert.OFFICE_EXTS, reason: st.reason });
+});
+
+router.post('/convert-office', uploadPreflight, (req, res) => {
+  const st = officeConvert.status();
+  if (!st.enabled) return res.status(501).json({ error: `PowerPoint conversion is not available: ${st.reason}.` });
+
+  officeUpload.single('file')(req, res, async (upErr) => {
+    const dropUpload = () => {
+      if (req.file && req.file.destination && req.file.destination.startsWith(os.tmpdir())) {
+        try { fs.rmSync(req.file.destination, { recursive: true, force: true }); } catch (_) { /* gone */ }
+      }
+    };
+    if (upErr) {
+      dropUpload();
+      if (upErr instanceof multer.MulterError && upErr.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ error: `File is larger than the ${Math.round(config.maxFileSize / 1048576)}MB limit.` });
+      }
+      return res.status(400).json({ error: upErr.message || 'Upload failed' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: `No presentation received. Accepted: ${officeConvert.OFFICE_EXTS.map((e) => '.' + e).join(', ')}` });
+    }
+
+    let head = null;
+    try {
+      const fd = fs.openSync(req.file.path, 'r');
+      head = Buffer.alloc(8);
+      fs.readSync(fd, head, 0, 8, 0);
+      fs.closeSync(fd);
+    } catch (_) { head = null; }
+    if (!officeConvert.looksLikeOffice(head)) {
+      dropUpload();
+      return res.status(400).json({ error: 'This does not look like a PowerPoint or OpenDocument presentation.' });
+    }
+
+    let result = null;
+    try {
+      result = await officeConvert.convertToPdf(req.file.path, req.file.originalname);
+    } catch (err) {
+      dropUpload();
+      if (err && err.detail) console.warn('[office-convert]', err.message, err.detail);
+      else if (!err || !err.status) console.error('[office-convert]', err);
+      return res.status((err && err.status) || 500).json({ error: (err && err.status && err.message) || 'Conversion failed' });
+    }
+    dropUpload();
+
+    const done = () => { if (result) { result.cleanup(); result = null; } };
+    res.on('close', done);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    const stream = fs.createReadStream(result.pdfPath);
+    stream.on('error', () => { done(); if (!res.headersSent) res.status(500).end(); else res.destroy(); });
+    stream.pipe(res);
+  });
+});
+
 router.post('/', checkStorageLimit, uploadPreflight, uploadContentFilesGuarded, async (req, res) => {
   // Only ever arrays multer built (upload.fields caps each), checked as such rather than assumed, and
   // the total bounded again here so the ingest loop below never runs on a length nobody vetted.

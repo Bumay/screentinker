@@ -18,6 +18,7 @@
 
 import { uploadFileResumable } from '../../lib/chunked-upload.js';
 import { isPdf } from '../pdf-pages.js';
+import { isOffice } from '../office-convert.js';
 import { esc } from '../../utils.js';
 import { t } from '../../i18n.js';
 import { confirmDialog } from './dialog.js';
@@ -44,7 +45,7 @@ export function activeCount() { return items.filter((i) => ['queued', 'uploading
  */
 export function enqueue(files, { folderId = null, folderLabel = '' } = {}) {
   for (const file of files) {
-    items.push({ id: ++seq, file, pdf: isPdf(file), folderId, folderLabel, state: 'queued', sent: 0, total: file.size || 0, note: '', error: '', controller: null });
+    items.push({ id: ++seq, file, pdf: isPdf(file) || isOffice(file), folderId, folderLabel, state: 'queued', sent: 0, total: file.size || 0, note: '', error: '', controller: null });
   }
   collapsed = false;
   renderTray();

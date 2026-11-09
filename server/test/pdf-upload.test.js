@@ -83,8 +83,10 @@ test('pages go through api.uploadContent, not a bare fetch or XHR (the house rul
   assert.match(fn, /api\.createPlaylist\(/);
   assert.match(fn, /api\.addPlaylistItemsBulk\(/);
   // A PDF is routed away from the ordinary upload before it can reach the server.
-  assert.match(lib, /const pdfs = all\.filter\(isPdf\)/);
-  assert.match(lib, /const list = all\.filter\(\(f\) => !isPdf\(f\)\)/);
+  // (Fork: PowerPoint decks share this path, so the filter is isPdf OR isOffice.)
+  assert.match(lib, /const isDoc = \(f\) => isPdf\(f\) \|\| isOffice\(f\)/);
+  assert.match(lib, /const pdfs = all\.filter\(isDoc\)/);
+  assert.match(lib, /const list = all\.filter\(\(f\) => !isDoc\(f\)\)/);
 });
 
 test('the main picker accepts PDFs and the replace-file picker does not', () => {

@@ -59,8 +59,8 @@ test('media URL: the type is detected from the extension, and only when the link
   assert.equal(add.detectMediaType('nonsense'), null);
 });
 
-test('the uploader is offered exactly what it takes: media, bundles and PDFs', () => {
-  assert.equal(add.UPLOAD_ACCEPT, 'video/*,image/*,audio/*,.zip,.wgt,.pdf,application/pdf');
+test('the uploader is offered exactly what it takes: media, bundles, PDFs and presentations', () => {
+  assert.equal(add.UPLOAD_ACCEPT, 'video/*,image/*,audio/*,.zip,.wgt,.pdf,application/pdf,.pptx,.ppt,.ppsx,.pps,.pptm,.potx,.odp');
   const lib = read('views/content-library.js');
   assert.equal(lib.match(/id="fileInput"[^>]*accept="([^"]+)"/)[1], add.UPLOAD_ACCEPT, 'the page and the modal agree');
 });
@@ -134,6 +134,7 @@ test('upload queue: a failed file is that file’s problem — the rest still up
   const q = load('components/library/upload-queue.js', ['enqueue', 'onUploaded', 'activeCount', 'setPdfImporter'], {
     document, t: tStub, esc: String, setTimeout, clearTimeout, AbortController,
     isPdf: (f) => /\.pdf$/.test(f.name),
+    isOffice: (f) => /\.pptx?$/.test(f.name),
     confirmDialog: async () => true,
     uploadFileResumable: async (file, o) => {
       calls.push([file.name, o.folderId]);
