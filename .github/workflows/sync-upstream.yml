@@ -1,0 +1,55 @@
+# Holt jede Nacht die Änderungen von screentinker/screentinker in diesen Fork.
+#
+# - Gibt es nichts Neues, passiert nichts.
+# - Lässt sich das Original sauber einmergen, wird gepusht. Der Push löst "Fork image" aus,
+#   und ein neues ghcr.io/bumay/screentinker:latest entsteht.
+# - Gibt es einen Konflikt, schlägt der Lauf fehl (GitHub schickt eine Mail) und am Fork
+#   ändert sich nichts. Dann einmal von Hand mergen, siehe FORK.md.
+#
+# Braucht das Secret SYNC_TOKEN: ein Fine-grained Personal Access Token nur für dieses Repo
+# mit "Contents: Read and write" und "Workflows: Read and write". Das eingebaute GITHUB_TOKEN
+# reicht nicht: Es darf keine Workflow-Dateien ändern (das Original ändert sie ab und zu),
+# und ein Push mit ihm würde den Image-Build nicht auslösen.
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: '17 2 * * *'   # täglich ca. 03:17 / 04:17 deutscher Zeit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: github.repository_owner != 'screentinker'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Merge upstream/main
+        run: |
+          git config user.name  "fork-sync"
+          git config user.email "fork-sync@users.noreply.github.com"
+          git remote add upstream https://github.com/screentinker/screentinker.git
+          git fetch upstream main
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Schon aktuell."
+            exit 0
+          fi
+
+          echo "Neu im Original:"
+          git log --oneline HEAD..upstream/main | head -50
+
+          if ! git merge --no-edit upstream/main; then
+            echo "::error::Merge-Konflikt mit dem Original. Bitte von Hand mergen (siehe FORK.md)."
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+          git push origin main
