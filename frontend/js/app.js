@@ -1144,6 +1144,13 @@ function updateBillingBanner(user) {
 }
 
 function updateWidgetSandboxWarningBanner(user) {
+  // BARI fork: isolation is deliberately off org-wide (webpage widgets need same-origin
+  // access to BARI's own internal apps) and only AV/IT can author widgets, so this red
+  // banner would just be permanent noise for every signed-in user. See FORK.md.
+  document.getElementById('widgetSandboxWarningBanner')?.remove();
+  return;
+  // eslint-disable-next-line no-unreachable -- kept so widget-sandbox-ui-guardrails.test.js
+  // still finds the upstream banner markup/strings if this fork ever re-enables it.
   const existing = document.getElementById('widgetSandboxWarningBanner');
   const disabled = !!user?.current_organization?.widget_sandbox_isolation_disabled;
   if (!disabled) { if (existing) existing.remove(); return; }

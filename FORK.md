@@ -1,6 +1,20 @@
 # BARI fork of ScreenTinker
 
-Upstream: https://github.com/screentinker/screentinker (MIT). This fork adds one feature.
+Upstream: https://github.com/screentinker/screentinker (MIT). This fork adds two things.
+
+## Widget sandbox isolation disabled, warning banner suppressed
+
+Our workspace embeds our own internal apps (e.g. BARI_Schichtplaner's `/Produktion` kiosk)
+as "webpage" widgets. Those need `allow-same-origin` to keep their own cookies/WebSocket
+session, so "Widget sandbox isolation" is turned off org-wide in Settings > Security
+(see `server/routes/widgets.js`'s `widgetIframeSandboxForWorkspace`).
+
+That makes upstream's permanent red "isolation is DISABLED" banner
+(`updateWidgetSandboxWarningBanner` in `frontend/js/app.js`) fire for every signed-in user,
+forever — so it's suppressed here. Accepted trade-off: only AV/IT have widget-author
+access in our workspace, and every widget they add is an internal, trusted URL, so there's
+no untrusted script that could use the relaxed sandbox to steal a player's device token.
+Re-evaluate if that user base or the kind of widgets they add ever changes.
 
 ## PowerPoint upload
 
